@@ -1,16 +1,16 @@
 import os
 import time
 import math
+import random
+import numpy as np
 
 import torch
 from torch.utils.data import DataLoader
-
 from utils import (
     PriorBox,
-    Preprocess,
+    Augmentation,
     MultiBoxLoss,
-    VOCDetection,
-    AnnotationTransform
+    VOCDetection
 )
 
 from models import FaceBoxes
@@ -46,7 +46,8 @@ def parse_args():
     # Traning arguments
     parser.add_argument('--num-classes', type=int, default=2, help='Number of classes in the dataset')
     parser.add_argument('--batch-size', default=32, type=int, help='Number of samples in each batch during training.')
-    parser.add_argument('--max-epochs', default=300, type=int, help='max epoch for retraining')
+    parser.add_argument('--epochs', default=300, type=int, help='max epoch for retraining')
+    parser.add_argument('--print-freq', type=int, default=10, help='Print frequency during training')
 
     # Optimizer and scheduler arguments
     parser.add_argument('--learning-rate', default=1e-3, type=float, help='Initial learning rate.')
@@ -56,10 +57,11 @@ def parse_args():
 
     parser.add_argument(
         '--save-dir',
-        default='./weights/',
+        default='./weights',
         type=str,
         help='Directory where trained model checkpoints will be saved.'
     )
+    parser.add_argument('--resume', action='store_true', help='Resume training from checkpoint')
 
     args = parser.parse_args()
 
@@ -74,153 +76,130 @@ if not os.path.exists(args.save_dir):
 rgb_mean = (104, 117, 123)  # bgr order
 
 
-image_size = cfg['image_size']  # only 1024 is supported
-num_classes = args.num_classes
-num_workers = args.num_workers
-batch_size = args.batch_size
-momentum = args.momentum
-weight_decay = args.weight_decay
-initial_lr = args.learning_rate
-gamma = args.gamma
-max_epoch = args.max_epochs
-train_data = args.train_data
-save_dir = args.save_dir
-
-model = FaceBoxes(num_classes)
-print("Printing model...")
-print(sum(p.numel() for p in model.parameters() if p.requires_grad))
+def random_seed(seed=42):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = model.to(device)
-
-optimizer = torch.optim.SGD(model.parameters(), lr=initial_lr, momentum=momentum, weight_decay=weight_decay)
-
-
-priorbox = PriorBox(cfg)
-priors = priorbox.generate_anchors()
-priors = priors.to(device)
-
-criterion = MultiBoxLoss(priors=priors, threshold=0.35, neg_pos_ratio=7, alpha=cfg['loc_weight'], device=device)
-
-
-def train_one_epoch(model, criterion, optimizer, data_loader, epoch, device, print_freq=None, scalar=None):
+def train_one_epoch(
+    model,
+    criterion,
+    optimizer,
+    data_loader,
+    lr_scheduler,
+    epoch,
+    device,
+    print_freq=10,
+    scaler=None
+) -> None:
     model.train()
-    epoch = 0
 
-    epoch_size = len(data_loader)
-    max_iter = max_epoch * epoch_size
-
-    stepvalues = (200 * epoch_size, 250 * epoch_size)
-    step_index = 0
-
-    start_iter = 0
-
-    for iteration in range(start_iter, max_iter):
-        if iteration % epoch_size == 0:
-            # create batch iterator
-            batch_iterator = iter(data_loader)
-
-            if (epoch % 10 == 0 and epoch > 0) or (epoch % 5 == 0 and epoch > 200):
-                torch.save(model.state_dict(), save_dir + 'FaceBoxes_epoch_' + str(epoch) + '.pth')
-            epoch += 1
-
-        st = time.time()
-        if iteration in stepvalues:
-            step_index += 1
-
-        lr = adjust_learning_rate(optimizer, gamma, epoch, step_index, iteration, epoch_size)
-
-        # load train data
-        images, targets = next(batch_iterator)
+    for batch_idx, (images, targets) in enumerate(data_loader):
+        start_time = time.time()
         images = images.to(device)
         targets = [target.to(device) for target in targets]
 
-        # forward
-        out = model(images)
+        with torch.cuda.amp.autocast(enabled=scaler is not None):
+            outputs = model(images)
+            loss, loss_loc, loss_conf = criterion(outputs, targets)
 
-        # backprop
         optimizer.zero_grad()
-        loss, loss_loc, loss_conf = criterion(out, targets)
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            optimizer.step()
 
-        loss.backward()
-        optimizer.step()
-
-        et = time.time()
-        batch_time = et - st
-
-        print('Epoch:{}/{} || Epochiter: {}/{} || Iter: {}/{} || L: {:.4f} C: {:.4f} || LR: {:.8f} || Batchtime: {:.4f} s'.format(
-            epoch, max_epoch,
-            (iteration % epoch_size) + 1,
-            epoch_size,
-            iteration + 1,
-            max_iter,
-            loss_loc.item(),
-            loss_conf.item(),
-            lr,
-            batch_time
-        )
-        )
-
-        torch.save(model.state_dict(), save_dir + 'checkpoint.pth')
-
-
-def adjust_learning_rate(optimizer, gamma, epoch, step_index, iteration, epoch_size):
-    """Sets the learning rate
-    # Adapted from PyTorch Imagenet example:
-    # https://github.com/pytorch/examples/blob/master/imagenet/main.py
-    """
-    warmup_epoch = -1
-    if epoch <= warmup_epoch:
-        lr = 1e-6 + (initial_lr-1e-6) * iteration / (epoch_size * warmup_epoch)
-    else:
-        lr = initial_lr * (gamma ** (step_index))
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
-    return lr
+        # Print training status
+        if (batch_idx + 1) % print_freq == 0:
+            lr = optimizer.param_groups[0]["lr"]
+            print(
+                f'Epoch: {epoch+1} | Batch: {batch_idx+1}/{len(data_loader)} | '
+                f'Loss Loc: {loss_loc.item():.4f} | Loss Conf: {loss_conf.item():.4f} | '
+                f'LR: {lr:.8f} | Time: {(time.time() - start_time):.4f} s'
+            )
 
 
 def main(params):
-    transform = Preprocess(cfg['image_size'], rgb_mean)
-    target_transform = AnnotationTransform()
-    dataset = VOCDetection(root=params.train_data, transform=transform, target_transform=target_transform)
+    random_seed()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # Prepare dataset and data loaders
+    dataset = VOCDetection(root=params.train_data, transform=Augmentation(cfg['image_size'], rgb_mean))
     data_loader = DataLoader(
         dataset,
         batch_size=params.batch_size,
         shuffle=True,
         num_workers=params.num_workers,
-        collate_fn=dataset.collate_fn
-
+        collate_fn=dataset.collate_fn,
+        pin_memory=True,
+        drop_last=True
     )
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Generate prior boxes
     priorbox = PriorBox(cfg)
     priors = priorbox.generate_anchors()
     priors = priors.to(device)
 
+    # Multi Box Loss
+    criterion = MultiBoxLoss(priors=priors, threshold=0.35, neg_pos_ratio=7, alpha=cfg['loc_weight'], device=device)
+
+    # Initialize model
     model = FaceBoxes(num_classes=params.num_classes)
     model.to(device)
 
+    # Optimizer
     optimizer = torch.optim.SGD(
         model.parameters(),
         lr=params.learning_rate,
         momentum=params.momentum,
         weight_decay=params.weight_decay
     )
-    criterion = MultiBoxLoss(priors=priors, threshold=0.35, neg_pos_ratio=7, alpha=cfg['loc_weight'], device=device)
 
-    for epoch in range(params.max_epochs):
+    # Learning rate scheduler
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+
+    start_epoch = 0
+    if params.resume:
+        try:
+            checkpoint = torch.load(f"{params.save_dir}/checkpoint.ckpt", map_location="cpu", weights_only=True)
+            model.load_state_dict(checkpoint["model"])
+            optimizer.load_state_dict(checkpoint["optimizer"])
+            lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+            start_epoch = checkpoint["epoch"] + 1
+            print(f"Checkpoint successfully loaded from {params.save_dir}/checkpoint.ckpt")
+        except Exception as e:
+            print(f"Exception occured, message: {e}")
+
+    for epoch in range(start_epoch, params.epochs):
         train_one_epoch(
             model,
             criterion,
             optimizer,
             data_loader,
+            lr_scheduler,
             epoch,
             device,
-            # print_freq,
+            params.print_freq,
+            scaler=None
         )
+
+        ckpt = {
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "lr_scheduler": lr_scheduler.state_dict(),
+            "epoch": epoch,
+        }
+
+        lr_scheduler.step()
+
+        torch.save(ckpt, f'{params.save_dir}/checkpoint.ckpt')
+
+        if (epoch + 1) % 50 == 0:
+            torch.save(model.state_dict(), f'{params.save_dir}/faceboxes_epoch_{epoch+1}.pth')
 
 
 if __name__ == '__main__':

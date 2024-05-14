@@ -180,7 +180,7 @@ def resize_subtract_mean(image, target_size, bgr_mean):
     return processed_image
 
 
-class Preprocess:
+class Augmentation:
     def __init__(self, image_size, bgr_mean):
         self.image_size = image_size
         self.bgr_mean = bgr_mean

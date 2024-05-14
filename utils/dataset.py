@@ -11,7 +11,7 @@ from torch.utils.data import Dataset
 WIDER_CLASSES = {'__background__': 0, 'face': 1}
 
 
-class AnnotationTransform:
+class AnnotationProcessor:
 
     def __init__(self, class_to_ind=None, keep_difficult=True):
         self.class_to_ind = WIDER_CLASSES if class_to_ind is None else class_to_ind
@@ -43,10 +43,10 @@ class AnnotationTransform:
 
 class VOCDetection(Dataset):
 
-    def __init__(self, root, transform=None, target_transform=None):
+    def __init__(self, root: str, transform=None):
         self.root = root
         self.transform = transform
-        self.target_transform = target_transform
+        self.target_transform = AnnotationProcessor()
 
         self.image_paths = []
         self.label_paths = []
@@ -90,10 +90,9 @@ class VOCDetection(Dataset):
     def collate_fn(batch):
         images = []
         targets = []
-
         # Iterate over each data sample in the batch
-        for img, target in batch:
-            images.append(img)  # Collect images
-            targets.append(torch.from_numpy(target).float())  # Convert bbox to torch.Tensor and collect
+        for image, target in batch:
+            images.append(image)
+            targets.append(torch.from_numpy(target).float())
 
         return torch.stack(images, 0), targets
