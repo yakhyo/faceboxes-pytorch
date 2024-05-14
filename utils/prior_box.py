@@ -3,13 +3,12 @@ import numpy as np
 from itertools import product
 
 import torch
-from typing import Tuple, Dict
 
 
 class PriorBox:
-    def __init__(self, cfg: Dict, image_size: Tuple[int, int] = None):
+    def __init__(self, cfg: dict) -> None:
         super().__init__()
-        self.image_size = image_size
+        self.image_size = [cfg['image_size'], cfg['image_size']]
         self.clip = cfg['clip']
         self.steps = cfg['steps']
         self.min_sizes = cfg['min_sizes']
