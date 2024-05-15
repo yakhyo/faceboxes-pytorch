@@ -68,11 +68,6 @@ def parse_args():
     return args
 
 
-args = parse_args()
-
-if not os.path.exists(args.save_dir):
-    os.mkdir(args.save_dir)
-
 rgb_mean = (104, 117, 123)  # bgr order
 
 
@@ -127,6 +122,9 @@ def main(params):
     random_seed()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # Create folder to save weights if not exists
+    os.makedirs(params.save_dir, exist_ok=True)
+
     # Prepare dataset and data loaders
     dataset = VOCDetection(root=params.train_data, transform=Augmentation(cfg['image_size'], rgb_mean))
     data_loader = DataLoader(
@@ -140,12 +138,19 @@ def main(params):
     )
 
     # Generate prior boxes
-    priorbox = PriorBox(cfg)
+    priorbox = PriorBox(cfg, image_size=(cfg['image_size'], cfg['image_size']))
     priors = priorbox.generate_anchors()
     priors = priors.to(device)
 
     # Multi Box Loss
-    criterion = MultiBoxLoss(priors=priors, threshold=0.35, neg_pos_ratio=7, alpha=cfg['loc_weight'], device=device)
+    criterion = MultiBoxLoss(
+        priors=priors,
+        threshold=0.35,
+        neg_pos_ratio=7,
+        alpha=cfg['loc_weight'],
+        variance=cfg['variance'],
+        device=device
+    )
 
     # Initialize model
     model = FaceBoxes(num_classes=params.num_classes)
@@ -198,7 +203,7 @@ def main(params):
 
         torch.save(ckpt, f'{params.save_dir}/checkpoint.ckpt')
 
-        if (epoch + 1) % 50 == 0:
+        if (epoch + 1) % 50 == 0 or epoch + 1 == epochs:
             torch.save(model.state_dict(), f'{params.save_dir}/faceboxes_epoch_{epoch+1}.pth')
 
 

@@ -40,6 +40,7 @@ class MultiBoxLoss(nn.Module):
         threshold: float = 0.5,
         neg_pos_ratio: float = 3.,
         alpha: float = 1.0,
+        variance = [0.1, 0.2],
         device=torch.device("cpu")
     ) -> None:
         super().__init__()
@@ -47,9 +48,9 @@ class MultiBoxLoss(nn.Module):
         self.threshold = threshold
         self.neg_pos_ratio = neg_pos_ratio
         self.alpha = alpha
+        self.variance = variance
         self.device = device
 
-        self.variance = [0.1, 0.2]
 
     def forward(self, predictions, ground_truth):
         """

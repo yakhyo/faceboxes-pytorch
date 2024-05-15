@@ -1,4 +1,5 @@
 # Project files
+results/
 data/
 *.jpg
 # Byte-compiled / optimized / DLL files
