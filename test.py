@@ -4,133 +4,90 @@ import argparse
 import numpy as np
 
 import torch
-import torch.backends.cudnn as cudnn
-
 import torch.nn.functional as F
 
 
-from data import cfg
 from utils.prior_box import PriorBox
 
 from models.faceboxes import FaceBoxes
-from utils.box_utils import decode
-from timer import Timer
-
-parser = argparse.ArgumentParser(description='FaceBoxes')
-
-parser.add_argument('-m', '--trained_model', default='weights/checkpoint.pth',
-                    type=str, help='Trained state_dict file path to open')
-parser.add_argument('--save_folder', default='eval/', type=str, help='Dir to save results')
-parser.add_argument('--dataset', default='PASCAL', type=str, choices=['AFW', 'PASCAL', 'FDDB'], help='dataset')
-parser.add_argument('--confidence_threshold', default=0.05, type=float, help='confidence_threshold')
-parser.add_argument('--top_k', default=300, type=int, help='top_k')
-parser.add_argument('--nms_threshold', default=0.3, type=float, help='nms_threshold')
-parser.add_argument('--keep_top_k', default=750, type=int, help='keep_top_k')
-parser.add_argument('-s', '--show_image', action="store_true", default=False, help='show detection results')
-parser.add_argument('--vis_thres', default=0.5, type=float, help='visualization_threshold')
-args = parser.parse_args()
+from utils.box_utils import decode, nms
+from config import cfg
 
 
-def check_keys(model, pretrained_state_dict):
-    ckpt_keys = set(pretrained_state_dict.keys())
-    model_keys = set(model.state_dict().keys())
-    used_pretrained_keys = model_keys & ckpt_keys
-    unused_pretrained_keys = ckpt_keys - model_keys
-    missing_keys = model_keys - ckpt_keys
-    print('Missing keys:{}'.format(len(missing_keys)))
-    print('Unused checkpoint keys:{}'.format(len(unused_pretrained_keys)))
-    print('Used keys:{}'.format(len(used_pretrained_keys)))
-    assert len(used_pretrained_keys) > 0, 'load NONE from pretrained checkpoint'
-    return True
+def parse_args():
+    parser = argparse.ArgumentParser(description='Testing Arguments for FaceBoxes Model')
+
+    parser.add_argument(
+        '--weights',
+        default='./weights/FaceBoxes_epoch_295_1.pth',
+        type=str,
+        help='Path to the trained model state dict file.'
+    )
+    parser.add_argument('--save-dir', default='eval/', type=str, help='Directory to save the detection results.')
+    parser.add_argument(
+        '--dataset',
+        default='PASCAL',
+        type=str,
+        choices=['AFW', 'PASCAL', 'FDDB'],
+        help='Select the dataset to evaluate on.'
+    )
+    parser.add_argument(
+        '--conf-threshold',
+        default=0.05,
+        type=float,
+        help='Minimum confidence threshold for considering detections.'
+    )
+    parser.add_argument(
+        '--pre-nms-top-k',
+        default=5000,
+        type=int,
+        help='Number of top bounding boxes to consider for NMS.'
+    )
+    parser.add_argument('--nms-threshold', default=0.3, type=float, help='Non-maximum suppression threshold.')
+    parser.add_argument(
+        '--post-nms-top-k',
+        default=1000,
+        type=int,
+        help='Number of top bounding boxes to keep after NMS.'
+    )
+    parser.add_argument('--show-image', action="store_true", default=False, help='Display detection results on images.')
+    parser.add_argument('--vis-threshold', default=0.5, type=float,  help='Visualization threshold for bounding boxes')
+
+    args = parser.parse_args()
+    return args
 
 
-def remove_prefix(state_dict, prefix):
-    ''' Old style model is stored with all names of parameters sharing common prefix 'module.' '''
-    print('remove prefix \'{}\''.format(prefix))
-    def f(x): return x.split(prefix, 1)[-1] if x.startswith(prefix) else x
-    return {f(key): value for key, value in state_dict.items()}
-
-
-def load_model(model, pretrained_path, load_to_cpu):
-    print('Loading pretrained model from {}'.format(pretrained_path))
-    if load_to_cpu:
-        pretrained_dict = torch.load(pretrained_path, map_location=lambda storage, loc: storage)
-    else:
-        device = torch.cuda.current_device()
-        pretrained_dict = torch.load(pretrained_path, map_location=lambda storage, loc: storage.cuda(device))
-    if "state_dict" in pretrained_dict.keys():
-        pretrained_dict = remove_prefix(pretrained_dict['state_dict'], 'module.')
-    else:
-        pretrained_dict = remove_prefix(pretrained_dict, 'module.')
-    check_keys(model, pretrained_dict)
-    model.load_state_dict(pretrained_dict, strict=False)
-    return model
-
-
-def nms(dets, thresh):
-    # thresh = self.nms_thresh
-    x1 = dets[:, 0]
-    y1 = dets[:, 1]
-    x2 = dets[:, 2]
-    y2 = dets[:, 3]
-    scores = dets[:, 4]
-
-    areas = (x2 - x1 + 1) * (y2 - y1 + 1)
-    order = scores.argsort()[::-1]
-
-    keep = []
-    while order.size > 0:
-        i = order[0]
-        keep.append(i)
-        xx1 = np.maximum(x1[i], x1[order[1:]])
-        yy1 = np.maximum(y1[i], y1[order[1:]])
-        xx2 = np.minimum(x2[i], x2[order[1:]])
-        yy2 = np.minimum(y2[i], y2[order[1:]])
-
-        w = np.maximum(0.0, xx2 - xx1 + 1)
-        h = np.maximum(0.0, yy2 - yy1 + 1)
-        inter = w * h
-        ovr = inter / (areas[i] + areas[order[1:]] - inter)
-
-        inds = np.where(ovr <= thresh)[0]
-        order = order[inds + 1]
-
-    return keep
-
-
-if __name__ == '__main__':
-
-    # net and model
-    net = FaceBoxes(num_classes=2)    # initialize detector
-    net = load_model(net, args.trained_model, False)
-    net.eval()
-    print('Finished loading model!')
-    print(net)
-    cudnn.benchmark = True
+def main(params):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    net = net.to(device)
+    
+    # Model initialization
+    model = FaceBoxes(num_classes=2)
+    model.eval()
+    model = model.to(device)
+    
+    # Load pretrained model weights
+    model.load_state_dict(torch.load(params.weights, map_location="cpu"))
+    print('Finished loading model!')
 
-    # save file
-    if not os.path.exists(args.save_folder):
-        os.makedirs(args.save_folder)
-    fw = open(os.path.join(args.save_folder, args.dataset + '_dets.txt'), 'w')
+    # Create folder to save results if not exists
+    os.makedirs(params.save_dir, exist_ok=True)
+
+    fw = open(os.path.join(params.save_dir, params.dataset + '_dets.txt'), 'w')
 
     # testing dataset
-    testset_folder = os.path.join('data', args.dataset, 'images/')
-    testset_list = os.path.join('data', args.dataset, 'img_list.txt')
+    testset_folder = os.path.join('data', params.dataset, 'images/')
+    testset_list = os.path.join('data', params.dataset, 'img_list.txt')
     with open(testset_list, 'r') as fr:
         test_dataset = fr.read().split()
     num_images = len(test_dataset)
 
     # testing scale
-    if args.dataset == "FDDB":
+    if params.dataset == "FDDB":
         resize = 3
-    elif args.dataset == "PASCAL":
+    elif params.dataset == "PASCAL":
         resize = 2.5
-    elif args.dataset == "AFW":
+    elif params.dataset == "AFW":
         resize = 1
-
-    _t = {'forward_pass': Timer(), 'misc': Timer()}
 
     # testing begin
     for i, img_name in enumerate(test_dataset):
@@ -141,48 +98,45 @@ if __name__ == '__main__':
             img = cv2.resize(img, None, None, fx=resize, fy=resize, interpolation=cv2.INTER_LINEAR)
         im_height, im_width, _ = img.shape
         scale = torch.Tensor([img.shape[1], img.shape[0], img.shape[1], img.shape[0]])
-        img -= (104, 117, 123)
+        img -= cfg['rgb_mean']
         img = img.transpose(2, 0, 1)
         img = torch.from_numpy(img).unsqueeze(0)
         img = img.to(device)
         scale = scale.to(device)
 
-        _t['forward_pass'].tic()
-        loc, conf = net(img)  # forward pass
+        loc, conf = model(img)  # forward pass
         conf = F.softmax(conf, dim=-1)
-        _t['forward_pass'].toc()
-        _t['misc'].tic()
+
         priorbox = PriorBox(cfg, image_size=(im_height, im_width))
         priors = priorbox.generate_anchors()
         priors = priors.to(device)
         prior_data = priors.data
+
         boxes = decode(loc.data.squeeze(0), prior_data, cfg['variance'])
         boxes = boxes * scale / resize
         boxes = boxes.cpu().numpy()
         scores = conf.squeeze(0).data.cpu().numpy()[:, 1]
 
         # ignore low scores
-        inds = np.where(scores > args.confidence_threshold)[0]
+        inds = np.where(scores > params.conf_threshold)[0]
         boxes = boxes[inds]
         scores = scores[inds]
 
         # keep top-K before NMS
-        order = scores.argsort()[::-1][:args.top_k]
+        order = scores.argsort()[::-1][:params.pre_nms_top_k]
         boxes = boxes[order]
         scores = scores[order]
 
         # do NMS
         dets = np.hstack((boxes, scores[:, np.newaxis])).astype(np.float32, copy=False)
-        # keep = py_cpu_nms(dets, args.nms_threshold)
-        keep = nms(dets, args.nms_threshold)
+        keep = nms(dets, params.nms_threshold)
         dets = dets[keep, :]
 
         # keep top-K faster NMS
-        dets = dets[:args.keep_top_k, :]
-        _t['misc'].toc()
+        dets = dets[:params.post_nms_top_k, :]
 
         # save dets
-        if args.dataset == "FDDB":
+        if params.dataset == "FDDB":
             fw.write('{:s}\n'.format(img_name))
             fw.write('{:.1f}\n'.format(dets.shape[0]))
             for k in range(dets.shape[0]):
@@ -203,13 +157,12 @@ if __name__ == '__main__':
                 ymin += 0.2 * (ymax - ymin + 1)
                 score = dets[k, 4]
                 fw.write('{:s} {:.3f} {:.1f} {:.1f} {:.1f} {:.1f}\n'.format(img_name, score, xmin, ymin, xmax, ymax))
-        print('im_detect: {:d}/{:d} forward_pass_time: {:.4f}s misc: {:.4f}s'.format(i +
-              1, num_images, _t['forward_pass'].average_time, _t['misc'].average_time))
+        print('im_detect: {:d}/{:d}'.format(i + 1, num_images))
 
         # show image
-        if args.show_image:
+        if params.show_image:
             for b in dets:
-                if b[4] < args.vis_thres:
+                if b[4] < params.vis_threshold:
                     continue
                 text = "{:.4f}".format(b[4])
                 b = list(map(int, b))
@@ -224,3 +177,8 @@ if __name__ == '__main__':
             cv2.imwrite(f"results/pascal/{img_name}.png", img_raw)
 
     fw.close()
+
+
+if __name__ == '__main__':
+    args = parse_args()
+    main(params=args)
