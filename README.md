@@ -175,4 +175,4 @@ The project is licensed under the [MIT license](https://opensource.org/license/m
 
 
 ## Reference
-The project is built on top of [face-parsing.PyTorch](https://github.com/zisianw/FaceBoxes.PyTorch). Model architecture and training strategy have been re-written for better performance.
+The project is built on top of [FaceBoxes.PyTorch](https://github.com/zisianw/FaceBoxes.PyTorch). Model architecture and training strategy have been re-written for better performance.
