@@ -40,7 +40,7 @@ def parse_args():
     parser.add_argument('--print-freq', type=int, default=10, help='Print frequency during training.')
 
     # Optimizer and scheduler arguments
-    parser.add_argument('--learning-rate', default=1e-3, type=float, help='Initial learning rate.')
+    parser.add_argument('--learning-rate', default=0.01, type=float, help='Initial learning rate.')
     parser.add_argument('--lr-warmup-epochs', type=int, default=1, help='Number of warmup epochs.')
     parser.add_argument('--power', type=float, default=0.9, help='Power for learning rate policy.')
     parser.add_argument('--momentum', default=0.9, type=float, help='Momentum factor in SGD optimizer.')
@@ -61,7 +61,7 @@ def parse_args():
 
 
 rgb_mean = (104, 117, 123)  # bgr order
-initial_lr = 1e-3
+
 
 def random_seed(seed=42):
     torch.manual_seed(seed)
@@ -84,90 +84,47 @@ def add_weight_decay(model, weight_decay=1e-5):
             {"params": decay, "weight_decay": weight_decay}]
 
 
-def adjust_learning_rate(optimizer, gamma, epoch, step_index, iteration, epoch_size):
-    """Sets the learning rate
-    # Adapted from PyTorch Imagenet example:
-    # https://github.com/pytorch/examples/blob/master/imagenet/main.py
-    """
-    warmup_epoch = -1
-    if epoch <= warmup_epoch:
-        lr = 1e-6 + (initial_lr-1e-6) * iteration / (epoch_size * warmup_epoch)
-    else:
-        lr = initial_lr * (gamma ** (step_index))
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
-    return lr
-
-
 def train_one_epoch(
     model,
     criterion,
     optimizer,
     data_loader,
     lr_scheduler,
-    start_epoch,
-    params,
+    epoch,
     device,
     print_freq=10,
     scaler=None
 ) -> None:
     model.train()
-    
-    iteration = 0
-    epoch_size = len(data_loader)
+    batch_loss = []
+    for batch_idx, (images, targets) in enumerate(data_loader):
+        start_time = time.time()
+        images = images.to(device)
+        targets = [target.to(device) for target in targets]
 
-    step_values = (200, 250)  # epochs
-    step_index = 0
-    
+        with torch.cuda.amp.autocast(enabled=scaler is not None):
+            outputs = model(images)
+            loss, loss_loc, loss_conf = criterion(outputs, targets)
 
-    for epoch in range(start_epoch, params.epochs):
-        batch_loss = []
-        for batch_idx, (images, targets) in enumerate(data_loader):
-            start_time = time.time()
-            images = images.to(device)
-            targets = [target.to(device) for target in targets]
+        optimizer.zero_grad()
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            optimizer.step()
 
-            with torch.cuda.amp.autocast(enabled=scaler is not None):
-                outputs = model(images)
-                loss, loss_loc, loss_conf = criterion(outputs, targets)
-
-            optimizer.zero_grad()
-            if scaler is not None:
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                loss.backward()
-                optimizer.step()
-
-            iteration += 1
-            if epoch in step_values:
-                step_index += 1
-
-            lr = adjust_learning_rate(optimizer, params.gamma, epoch, step_index, iteration, epoch_size)
-
-            # Print training status
-            if (batch_idx + 1) % print_freq == 0:
-                lr = optimizer.param_groups[0]["lr"]
-                print(
-                    f'Epoch: {epoch+1}/{params.epochs} | Batch: {batch_idx+1}/{len(data_loader)} | '
-                    f'Loss Loc: {loss_loc.item():.4f} | Loss Conf: {loss_conf.item():.4f} | '
-                    f'LR: {lr:.8f} | Time: {(time.time() - start_time):.4f} s'
-                )
-            batch_loss.append(loss.item())
-        print(f"Avg batch loss: {np.mean(batch_loss):.7f}")
-
-        ckpt = {
-            "model": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "lr_scheduler": lr_scheduler.state_dict(),
-            "epoch": epoch,
-        }
-
-        torch.save(ckpt, f'{params.save_dir}/checkpoint.ckpt')
-
-        if (epoch + 1) % 50 == 0 or (epoch + 1) == params.epochs:
-            torch.save(model.state_dict(), f'{params.save_dir}/faceboxes_epoch_{epoch+1}.pth')
+        # Print training status
+        if (batch_idx + 1) % print_freq == 0:
+            lr = optimizer.param_groups[0]["lr"]
+            print(
+                f'Epoch: {epoch+1} | Batch: {batch_idx+1}/{len(data_loader)} | '
+                f'Loss Loc: {loss_loc.item():.4f} | Loss Conf: {loss_conf.item():.4f} | '
+                f'LR: {lr:.8f} | Time: {(time.time() - start_time):.4f} s'
+            )
+        batch_loss.append(loss.item())
+    print(f"Avg batch loss: {np.mean(batch_loss):.7f}")
 
 
 def main(params):
@@ -209,7 +166,8 @@ def main(params):
     model.to(device)
 
     # Optimizer
-    parameters = add_weight_decay(model, params.weight_decay)
+    # parameters = add_weight_decay(model, params.weight_decay)
+    parameters = model.parameters()
     optimizer = torch.optim.SGD(
         parameters,
         lr=params.learning_rate,
@@ -218,7 +176,7 @@ def main(params):
     )
 
     # Learning rate scheduler
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
 
     # iters_per_epoch = len(data_loader)
     # lr_scheduler = PolynomialLR(
@@ -239,35 +197,34 @@ def main(params):
         except Exception as e:
             print(f"Exception occured, message: {e}")
 
-    # for epoch in range(start_epoch, params.epochs):
-    train_one_epoch(
-        model,
-        criterion,
-        optimizer,
-        data_loader,
-        lr_scheduler,
-        start_epoch,
-        params,
-        device,
-        params.print_freq,
-        scaler=None
-    )
+    for epoch in range(start_epoch, params.epochs):
+        train_one_epoch(
+            model,
+            criterion,
+            optimizer,
+            data_loader,
+            lr_scheduler,
+            epoch,
+            device,
+            params.print_freq,
+            scaler=None
+        )
 
-    # ckpt = {
-    #     "model": model.state_dict(),
-    #     "optimizer": optimizer.state_dict(),
-    #     "lr_scheduler": lr_scheduler.state_dict(),
-    #     "epoch": epoch,
-    # }
-    # if epoch in (200, 250):
-    #     step_index += 1
+        ckpt = {
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "lr_scheduler": lr_scheduler.state_dict(),
+            "epoch": epoch,
+        }
 
-    # # lr_scheduler.step()
+        lr_scheduler.step()
 
-    # torch.save(ckpt, f'{params.save_dir}/checkpoint.ckpt')
+        torch.save(ckpt, f'{params.save_dir}/checkpoint.ckpt')
 
-    # if (epoch + 1) % 50 == 0 or (epoch + 1) == params.epochs:
-    #     torch.save(model.state_dict(), f'{params.save_dir}/faceboxes_epoch_{epoch+1}.pth')
+        
+    #  save final model
+    state = model.state_dict()
+    torch.save(state, f'./weights/last.pt')
 
 
 if __name__ == '__main__':
