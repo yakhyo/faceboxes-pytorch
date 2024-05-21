@@ -4,6 +4,8 @@ results/
 data/*.jpg
 eval/
 *.jpg
+inference_results
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
