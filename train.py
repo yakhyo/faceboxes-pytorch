@@ -27,7 +27,7 @@ def parse_args():
     # Dataset and data handling arguments
     parser.add_argument(
         '--train-data',
-        default='../data/WIDER_FACE',
+        default='./data/WIDER_FACE',
         type=str,
         help='Path to the training dataset directory.'
     )

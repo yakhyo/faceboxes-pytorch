@@ -2,18 +2,16 @@ import os
 import cv2
 import argparse
 import numpy as np
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
 
 
-from utils.prior_box import PriorBox
-
-from models.faceboxes import FaceBoxes
-from utils.box_utils import decode, nms
 from config import cfg
-
-from pathlib import Path
+from models.faceboxes import FaceBoxes
+from utils.prior_box import PriorBox
+from utils.box_utils import decode, nms
 
 
 def parse_args():
@@ -25,7 +23,7 @@ def parse_args():
         type=str,
         help='Path to the trained model state dict file.'
     )
-    parser.add_argument('--save-dir', default='eval/', type=str, help='Directory to save the detection results.')
+    parser.add_argument('--save-dir', default='eval', type=str, help='Directory to save the detection results.')
     parser.add_argument(
         '--dataset',
         default='PASCAL',
@@ -74,16 +72,16 @@ def main(params):
     # Create folder to save results if not exists
     save_dir = Path(params.save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
-    
-    # To save inferenced images 
-    os.makedirs(f"{params.save_dir}/{params.dataset}")
+
+    # To save inferenced images
+    os.makedirs(f"{params.save_dir}/{params.dataset}", exist_ok=True)
 
     with open(save_dir / f'{params.dataset}_dets.txt', 'w') as fw:
 
         # Testing dataset
         testset_folder = Path('data') / params.dataset / 'images'
         testset_list = Path('data') / params.dataset / 'img_list.txt'
-        
+
         with open(testset_list, 'r') as fr:
             test_dataset = fr.read().split()
         num_images = len(test_dataset)
@@ -93,19 +91,20 @@ def main(params):
         resize = resize_map.get(params.dataset, 1)
 
         # Testing begin
-        for idx, img_name in enumerate(test_dataset):
-            image_path = testset_folder / f'{img_name}.jpg'
-            img_raw = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
-            img = np.float32(img_raw)
+        for idx, image_name in enumerate(test_dataset):
+            image_path = testset_folder / f'{image_name}.jpg'
+            image_raw = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+            image_np = np.float32(image_raw)
             if resize != 1:
-                img = cv2.resize(img, None, fx=resize, fy=resize, interpolation=cv2.INTER_LINEAR)
-            im_height, im_width = img.shape[:2]
-            scale = torch.tensor([img.shape[1], img.shape[0], img.shape[1], img.shape[0]], device=device)
-            img -= cfg['rgb_mean']
-            img = img.transpose(2, 0, 1)
-            img = torch.from_numpy(img).unsqueeze(0).to(device)
+                image_np = cv2.resize(image_np, None, fx=resize, fy=resize, interpolation=cv2.INTER_LINEAR)
+            im_height, im_width = image_np.shape[:2]
+            scale = torch.tensor([image_np.shape[1], image_np.shape[0],
+                                 image_np.shape[1], image_np.shape[0]], device=device)
+            image_np -= cfg['rgb_mean']
+            image_np = image_np.transpose(2, 0, 1)
+            image_tensor = torch.from_numpy(image_np).unsqueeze(0).to(device)  # Add batch and move to device
 
-            loc, conf = model(img)  # Forward pass
+            loc, conf = model(image_tensor)  # Forward pass
             conf = F.softmax(conf, dim=-1)
 
             priorbox = PriorBox(cfg, image_size=(im_height, im_width))
@@ -136,7 +135,7 @@ def main(params):
 
             # Save detections
             if params.dataset == "FDDB":
-                fw.write(f'{img_name}\n{dets.shape[0]:.1f}\n')
+                fw.write(f'{image_name}\n{dets.shape[0]:.1f}\n')
                 for det in dets:
                     xmin, ymin, xmax, ymax, score = det
                     w, h = xmax - xmin + 1, ymax - ymin + 1
@@ -145,23 +144,24 @@ def main(params):
                 for det in dets:
                     xmin, ymin, xmax, ymax, score = det
                     ymin += 0.2 * (ymax - ymin + 1)
-                    fw.write(f'{img_name} {score:.3f} {xmin:.1f} {ymin:.1f} {xmax:.1f} {ymax:.1f}\n')
+                    fw.write(f'{image_name} {score:.3f} {xmin:.1f} {ymin:.1f} {xmax:.1f} {ymax:.1f}\n')
 
             print(f'Processing: {idx+1}/{num_images}')
 
             # Show image
             if params.show_image:
-                for b in dets:
-                    if b[4] < params.vis_threshold:
+                for det in dets:
+                    xmin, ymin, xmax, ymax, score = det
+                    if score < params.vis_threshold:
                         continue
-                    text = f"{b[4]:.4f}"
-                    b = list(map(int, b))
-                    cv2.rectangle(img_raw, (b[0], b[1]), (b[2], b[3]), (0, 0, 255), 2)
-                    cv2.putText(img_raw, text, (b[0], b[1] + 12), cv2.FONT_HERSHEY_DUPLEX, 0.5, (255, 255, 255))
-                
-                # cv2.imshow('res', img_raw)
+                    text = f"{score:.4f}"
+                    xmin, ymin, xmax, ymax = map(int, [xmin, ymin, xmax, ymax])
+                    cv2.rectangle(image_raw, (xmin, ymin), (xmax, ymax), (0, 0, 255), 2)
+                    cv2.putText(image_raw, text, (b[0], b[1] + 12), cv2.FONT_HERSHEY_DUPLEX, 0.5, (255, 255, 255))
+
+                # cv2.imshow('res', image_raw)
                 # cv2.waitKey(0)
-                cv2.imwrite(f"{params.save_dir}/{params.dataset}/{img_name}.jpg", img_raw)
+                cv2.imwrite(f"{params.save_dir}/{params.dataset}/{image_name}.jpg", image_raw)
 
 
 if __name__ == '__main__':
