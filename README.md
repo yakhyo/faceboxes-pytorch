@@ -30,7 +30,7 @@ FaceBoxes is a high-performance, real-time face detection model specifically des
 Following updates have been made so far:
 
 - [x] Re-written the training code and model architecture.
-- [x] Pre-trained weights and checkpoint file is available under `weights` folder.
+- [x] Pre-trained weights and checkpoint file are available [here](https://github.com/yakhyo/faceboxes-pytorch/releases/tag/v0.0.1).
 - [x] Made several auxiliary updates to the code.
 
 To Do
@@ -45,6 +45,13 @@ To Do
 git clone https://github.com/yakhyo/faceboxes-pytorch.git
 cd faceboxes-pytorch
 ```
+
+**To download pre-trained model weights**:
+- Run below command:
+  ```
+  sh download.sh
+  ```
+- Download from [here](https://github.com/yakhyo/faceboxes-pytorch/releases/download/v0.0.1/faceboxes.pth)
 
 2. **Install dependencies**:
 
@@ -160,6 +167,7 @@ Example run command:
 python test --weights ./weights/faceboxes.pth --dataset PASCAL
 ```
 It creates a folder with `eval`  name and stores there detection results in a text file.
+
 ## Usage
 
 To inference on a single image:

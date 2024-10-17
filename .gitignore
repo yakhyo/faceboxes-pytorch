@@ -4,6 +4,7 @@ results/
 data/*.jpg
 eval/
 data/
+weights/*.pth
 
 
 # Byte-compiled / optimized / DLL files
