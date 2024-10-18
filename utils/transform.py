@@ -102,7 +102,7 @@ def distort_image(image):
         apply_adjustments(image[:, :, 1], alpha=random.uniform(0.5, 1.5))
 
     # Hue distortion
-    if random.choice([True, False]):
+    if random.random() >= 0.5:
         hue_shift = image[:, :, 0].astype(int) + random.randint(-18, 18)
         image[:, :, 0] = np.mod(hue_shift, 180)
 
