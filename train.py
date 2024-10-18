@@ -14,7 +14,6 @@ from layers import PriorBox, MultiBoxLoss
 from utils import Augmentation, VOCDetection
 
 
-
 def parse_args():
     import argparse
 
@@ -99,7 +98,8 @@ def train_one_epoch(
 
         with torch.amp.autocast("cuda", enabled=scaler is not None):
             outputs = model(images)
-            loss, loss_loc, loss_conf = criterion(outputs, targets)
+            loss_loc, loss_conf = criterion(outputs, targets)
+            loss = cfg['loc_weight'] * loss_loc + loss_conf
 
         optimizer.zero_grad()
         if scaler is not None:
@@ -151,7 +151,6 @@ def main(params):
         priors=priors,
         threshold=0.35,
         neg_pos_ratio=7,
-        alpha=cfg['loc_weight'],
         variance=cfg['variance'],
         device=device
     )

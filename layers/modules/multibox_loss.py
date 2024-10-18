@@ -39,18 +39,15 @@ class MultiBoxLoss(nn.Module):
         priors: torch.Tensor,
         threshold: float = 0.5,
         neg_pos_ratio: float = 3.,
-        alpha: float = 1.0,
-        variance = [0.1, 0.2],
+        variance=[0.1, 0.2],
         device=torch.device("cpu")
     ) -> None:
         super().__init__()
         self.priors = priors  # torch.size(num_priors, 4)
         self.threshold = threshold
         self.neg_pos_ratio = neg_pos_ratio
-        self.alpha = alpha
         self.variance = variance
         self.device = device
-
 
     def forward(self, predictions, ground_truth):
         """
@@ -69,8 +66,8 @@ class MultiBoxLoss(nn.Module):
         num_classes = conf_preds.size(2)
         num_priors = self.priors.size(0)
 
-        loc_targets = torch.zeros((batch_size, num_priors, 4), dtype=torch.float).to(self.device)
-        conf_targets = torch.zeros((batch_size, num_priors), dtype=torch.long).to(self.device)
+        loc_targets = torch.Tensor(batch_size, num_priors, 4).to(self.device)
+        conf_targets = torch.LongTensor(batch_size, num_priors).to(self.device)
 
         for idx in range(batch_size):
             gt_boxes = ground_truth[idx][:, :-1].data
@@ -112,6 +109,4 @@ class MultiBoxLoss(nn.Module):
         loc_loss /= N
         conf_loss /= N
 
-        loss = self.alpha * loc_loss + conf_loss
-
-        return loss, loc_loss, conf_loss
+        return loc_loss, conf_loss
