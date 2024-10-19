@@ -192,15 +192,15 @@ class FaceBoxes(nn.Module):
         filters = [128, 256, 256]
 
         self.loc_layers = nn.Sequential(
-            nn.Conv2d(128, anchors[0] * 4, kernel_size=3, padding=1),
-            nn.Conv2d(256, anchors[1] * 4, kernel_size=3, padding=1),
-            nn.Conv2d(256, anchors[2] * 4, kernel_size=3, padding=1)
+            nn.Conv2d(filters[0], anchors[0] * 4, kernel_size=3, padding=1),
+            nn.Conv2d(filters[1], anchors[1] * 4, kernel_size=3, padding=1),
+            nn.Conv2d(filters[2], anchors[2] * 4, kernel_size=3, padding=1)
         )
 
         self.conf_layers = nn.Sequential(
-            nn.Conv2d(128, anchors[0] * num_classes, kernel_size=3, padding=1),
-            nn.Conv2d(256, anchors[1] * num_classes, kernel_size=3, padding=1),
-            nn.Conv2d(256, anchors[2] * num_classes, kernel_size=3, padding=1)
+            nn.Conv2d(filters[0], anchors[0] * num_classes, kernel_size=3, padding=1),
+            nn.Conv2d(filters[1], anchors[1] * num_classes, kernel_size=3, padding=1),
+            nn.Conv2d(filters[2], anchors[2] * num_classes, kernel_size=3, padding=1)
         )
 
         for m in self.modules():
