@@ -55,7 +55,7 @@ class FaceBoxesInference:
         priorbox = PriorBox(cfg, image_size=(im_height, im_width))
         priors = priorbox.generate_anchors().to(self.device)
 
-        boxes = decode(loc.data.squeeze(0), priors.data, cfg['variance'])
+        boxes = decode(loc.data.squeeze(0), priors, cfg['variance'])
         boxes = boxes * scale
         boxes = boxes.cpu().numpy()
         scores = conf.squeeze(0).data.cpu().numpy()[:, 1]
