@@ -70,9 +70,9 @@ class MultiBoxLoss(nn.Module):
         conf_targets = torch.LongTensor(batch_size, num_priors).to(self.device)
 
         for idx in range(batch_size):
-            gt_boxes = ground_truth[idx][:, :-1].data
-            gt_labels = ground_truth[idx][:, -1].data
-            prior_boxes = self.priors.data
+            gt_boxes = ground_truth[idx][:, :-1]
+            gt_labels = ground_truth[idx][:, -1]
+            prior_boxes = self.priors
             match(self.threshold, gt_boxes, prior_boxes, self.variance, gt_labels, loc_targets, conf_targets, idx)
 
         pos_mask = conf_targets > 0
@@ -105,7 +105,7 @@ class MultiBoxLoss(nn.Module):
         conf_loss = F.cross_entropy(conf_p, targets_weighted, reduction='sum')
 
         # Sum of losses: L(x, c, l, g) = (Lconf(x, c) + αLloc(x, l, g)) / N
-        N = max(num_pos.data.sum().float(), 1)
+        N = max(num_pos.sum().float(), 1)
         loc_loss /= N
         conf_loss /= N
 
