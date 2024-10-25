@@ -140,7 +140,6 @@ def parse_args():
         help='Number of top bounding boxes to keep after NMS.'
     )
     parser.add_argument('--vis-threshold', default=0.15, type=float, help='Visualization threshold for bounding boxes')
-    parser.add_argument('--batch-size', default=8, type=int, help='Batch size for batch inference.')
 
     args = parser.parse_args()
     return args
