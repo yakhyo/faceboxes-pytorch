@@ -5,6 +5,7 @@ data/*.jpg
 eval/
 data/
 weights/*.pth
+weights/*.ckpt
 
 
 # Byte-compiled / optimized / DLL files
