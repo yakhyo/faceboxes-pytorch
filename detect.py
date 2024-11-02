@@ -84,7 +84,8 @@ class FaceBoxesInference:
 def read_image(image_path: str) -> Tuple[np.ndarray, np.ndarray]:
     image_raw = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
     image_arr = np.float32(image_raw)
-    image_arr -= cfg['rgb_mean']  # actually bgr mean
+    rgb_mean = (104, 117, 123)
+    image_arr -= rgb_mean  # actually bgr mean
     image_arr = image_arr.transpose(2, 0, 1)  # HWC => CHW
     return image_raw, image_arr
 
@@ -139,7 +140,7 @@ def parse_args():
         type=int,
         help='Number of top bounding boxes to keep after NMS.'
     )
-    parser.add_argument('--vis-threshold', default=0.6, type=float, help='Visualization threshold for bounding boxes')
+    parser.add_argument('--vis-threshold', default=0.2, type=float, help='Visualization threshold for bounding boxes')
 
     args = parser.parse_args()
     return args

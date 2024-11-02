@@ -8,5 +8,7 @@ cfg = {
     'variance': [0.1, 0.2],
     'clip': False,
     'loc_weight': 2.0,
+    'milestones': [190, 220],
+    'epochs': 300,
     'rgb_mean': (104, 117, 123)  # bgr order
 }

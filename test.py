@@ -58,7 +58,7 @@ def parse_args():
 
 def main(params):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    rgb_mean = (104, 117, 123)
     # Model initialization
     model = FaceBoxes(num_classes=2)
     model.eval()
@@ -99,7 +99,7 @@ def main(params):
             im_height, im_width = image_np.shape[:2]
             scale = torch.tensor([image_np.shape[1], image_np.shape[0],
                                   image_np.shape[1], image_np.shape[0]], device=device)
-            image_np -= cfg['rgb_mean']
+            image_np -= rgb_mean
             image_np = image_np.transpose(2, 0, 1)
             image_tensor = torch.from_numpy(image_np).unsqueeze(0).to(device)  # Add batch and move to device
 
