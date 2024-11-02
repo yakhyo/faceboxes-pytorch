@@ -11,7 +11,7 @@ from typing import Tuple
 
 from config import cfg
 from models.faceboxes import FaceBoxes
-from utils.prior_box import PriorBox
+from layers import PriorBox
 from utils.box_utils import decode, nms
 
 
@@ -109,7 +109,7 @@ def parse_args():
 
     parser.add_argument(
         '--weights',
-        default='./weights/faceboxes.pth',
+        default='./weights/last.pth',
         type=str,
         help='Path to the trained model state dict file.'
     )
@@ -122,13 +122,13 @@ def parse_args():
     parser.add_argument('--image-path', type=str, help='Path to the image for inference.')
     parser.add_argument(
         '--conf-threshold',
-        default=0.05,
+        default=0.02,
         type=float,
         help='Minimum confidence threshold for considering detections.'
     )
     parser.add_argument(
         '--pre-nms-top-k',
-        default=300,
+        default=5000,
         type=int,
         help='Number of top bounding boxes to consider for NMS.'
     )
@@ -139,7 +139,7 @@ def parse_args():
         type=int,
         help='Number of top bounding boxes to keep after NMS.'
     )
-    parser.add_argument('--vis-threshold', default=0.15, type=float, help='Visualization threshold for bounding boxes')
+    parser.add_argument('--vis-threshold', default=0.6, type=float, help='Visualization threshold for bounding boxes')
 
     args = parser.parse_args()
     return args
