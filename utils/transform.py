@@ -4,6 +4,39 @@ import numpy as np
 from utils.box_utils import matrix_iof
 
 
+def draw_detections(original_image, detections, vis_threshold):
+    """
+    Draws bounding boxes and landmarks on the image based on multiple detections.
+
+    Args:
+        original_image (ndarray): The image on which to draw detections.
+        detections (ndarray): Array of detected bounding boxes and landmarks.
+        vis_threshold (float): The confidence threshold for displaying detections.
+    """
+
+    # Colors for visualization
+    BOX_COLOR = (0, 0, 255)
+    TEXT_COLOR = (255, 255, 255)
+
+    # Filter by confidence
+    detections = detections[detections[:, 4] >= vis_threshold]
+
+    print(f"#faces: {len(detections)}")
+
+    # Slice arrays efficiently
+    boxes = detections[:, 0:4].astype(np.int32)
+    scores = detections[:, 4]
+
+    for box, score in zip(boxes, scores):
+        # Draw bounding box
+        cv2.rectangle(original_image, (box[0], box[1]), (box[2], box[3]), BOX_COLOR, 2)
+
+        # Draw confidence score
+        text = f"{score:.2f}"
+        cx, cy = box[0], box[1] + 12
+        cv2.putText(original_image, text, (cx, cy), cv2.FONT_HERSHEY_DUPLEX, 0.5, TEXT_COLOR)
+
+
 def _crop(image, boxes, labels, img_dim):
     height, width, _ = image.shape
     pad_image_flag = True
@@ -50,7 +83,7 @@ def _crop(image, boxes, labels, img_dim):
         # make sure that the cropped image contains at least one face > 16 pixel at training image scale
         b_w_t = (boxes_t[:, 2] - boxes_t[:, 0] + 1) / w * img_dim
         b_h_t = (boxes_t[:, 3] - boxes_t[:, 1] + 1) / h * img_dim
-        mask_b = np.minimum(b_w_t, b_h_t) > 0.0
+        mask_b = np.minimum(b_w_t, b_h_t) > 16.0
         boxes_t = boxes_t[mask_b]
         labels_t = labels_t[mask_b]
 

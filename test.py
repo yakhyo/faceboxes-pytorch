@@ -104,7 +104,6 @@ def main(params):
             image_tensor = torch.from_numpy(image_np).unsqueeze(0).to(device)  # Add batch and move to device
 
             loc, conf = model(image_tensor)  # Forward pass
-            conf = F.softmax(conf, dim=-1)
 
             priorbox = PriorBox(cfg, image_size=(im_height, im_width))
             priors = priorbox.generate_anchors().to(device)

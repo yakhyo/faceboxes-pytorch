@@ -22,7 +22,7 @@ def parse_args():
     # Dataset and data handling arguments
     parser.add_argument(
         '--train-data',
-        default='./data/WIDER_FACE',
+        default='./data/widerface/train',
         type=str,
         help='Path to the training dataset directory.'
     )
@@ -31,7 +31,7 @@ def parse_args():
     # Traning arguments
     parser.add_argument('--num-classes', type=int, default=2, help='Number of classes in the dataset.')
     parser.add_argument('--batch-size', default=32, type=int, help='Number of samples in each batch during training.')
-    parser.add_argument('--epochs', default=300, type=int, help='max epoch for retraining.')
+    parser.add_argument('--epochs', default=250, type=int, help='max epoch for retraining.')
     parser.add_argument('--print-freq', type=int, default=10, help='Print frequency during training.')
 
     # Optimizer and scheduler arguments
