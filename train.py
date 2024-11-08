@@ -6,12 +6,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import PolynomialLR, StepLR
 
 from config import cfg
 from models import FaceBoxes
 from layers import PriorBox, MultiBoxLoss
-from utils import Augmentation, VOCDetection, WiderFaceDetection
+from utils import Augmentation, WiderFaceDetection
 
 
 def parse_args():
@@ -22,7 +21,7 @@ def parse_args():
     # Dataset and data handling arguments
     parser.add_argument(
         '--train-data',
-        default='./data/widerface/train',
+        default='./data/WIDER_FACE/',
         type=str,
         help='Path to the training dataset directory.'
     )
@@ -170,15 +169,7 @@ def main(params):
     )
 
     # Learning rate scheduler
-    # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=cfg['milestones'], gamma=params.gamma)
-
-    # iters_per_epoch = len(data_loader)
-    # lr_scheduler = PolynomialLR(
-    #     optimizer,
-    #     total_iters=iters_per_epoch * (params.epochs - params.lr_warmup_epochs),
-    #     power=params.power
-    # )
 
     start_epoch = 0
     if params.resume:
@@ -218,7 +209,7 @@ def main(params):
 
     #  save final model
     state = model.state_dict()
-    torch.save(state, f'{params.save_dir}/final.pth')
+    torch.save(state, f'{params.save_dir}/faceboxes.pth')
 
 
 if __name__ == '__main__':

@@ -1,2 +1,2 @@
 from utils.transform import Augmentation
-from utils.dataset import VOCDetection, WiderFaceDetection
+from utils.dataset import  WiderFaceDetection

@@ -19,7 +19,7 @@ def parse_arguments():
     parser.add_argument(
         '-w', '--weights',
         type=str,
-        default='./weights/Resnet34_Final.pth',
+        default='./weights/faceboxes.pth',
         help='Path to the trained model weights'
     )
 
@@ -27,7 +27,7 @@ def parse_arguments():
     parser.add_argument(
         '--conf-threshold',
         type=float,
-        default=0.4,
+        default=0.7,
         help='Confidence threshold for filtering detections'
     )
     parser.add_argument(
