@@ -229,6 +229,8 @@ class FaceBoxes(nn.Module):
         conf = torch.cat([c.view(c.size(0), -1) for c in conf], 1)
 
         loc = loc.view(loc.size(0), -1, 4)
-        conf = conf.view(conf.size(0), -1, self.num_classes)
+        conf = conf.view(conf.size(0), -1, 2)
 
-        return loc, conf
+        if self.training:
+            return loc, conf
+        return loc, F.softmax(conf, dim=-1)

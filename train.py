@@ -6,12 +6,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import PolynomialLR, StepLR
 
 from config import cfg
 from models import FaceBoxes
 from layers import PriorBox, MultiBoxLoss
-from utils import Augmentation, VOCDetection
+from utils import Augmentation, WiderFaceDetection
 
 
 def parse_args():
@@ -22,7 +21,7 @@ def parse_args():
     # Dataset and data handling arguments
     parser.add_argument(
         '--train-data',
-        default='./data/WIDER_FACE',
+        default='./data/WIDER_FACE/',
         type=str,
         help='Path to the training dataset directory.'
     )
@@ -31,11 +30,11 @@ def parse_args():
     # Traning arguments
     parser.add_argument('--num-classes', type=int, default=2, help='Number of classes in the dataset.')
     parser.add_argument('--batch-size', default=32, type=int, help='Number of samples in each batch during training.')
-    parser.add_argument('--epochs', default=300, type=int, help='max epoch for retraining.')
+    parser.add_argument('--epochs', default=250, type=int, help='max epoch for retraining.')
     parser.add_argument('--print-freq', type=int, default=10, help='Print frequency during training.')
 
     # Optimizer and scheduler arguments
-    parser.add_argument('--learning-rate', default=0.01, type=float, help='Initial learning rate.')
+    parser.add_argument('--learning-rate', default=1e-3, type=float, help='Initial learning rate.')
     parser.add_argument('--lr-warmup-epochs', type=int, default=1, help='Number of warmup epochs.')
     parser.add_argument('--power', type=float, default=0.9, help='Power for learning rate policy.')
     parser.add_argument('--momentum', default=0.9, type=float, help='Momentum factor in SGD optimizer.')
@@ -114,9 +113,9 @@ def train_one_epoch(
         if (batch_idx + 1) % print_freq == 0:
             lr = optimizer.param_groups[0]["lr"]
             print(
-                f'Epoch: {epoch + 1} | Batch: {batch_idx + 1}/{len(data_loader)} | '
-                f'Loss Loc: {loss_loc.item():.4f} | Loss Conf: {loss_conf.item():.4f} | '
-                f'LR: {lr:.8f} | Time: {(time.time() - start_time):.4f} s'
+                f"Epoch: {epoch + 1}/{cfg['epochs']} | Batch: {batch_idx + 1}/{len(data_loader)} | "
+                f"Loss Loc: {loss_loc.item():.4f} | Loss Conf: {loss_conf.item():.4f} | "
+                f"LR: {lr:.8f} | Time: {(time.time() - start_time):.4f} s"
             )
         batch_loss.append(loss.item())
     print(f"Avg batch loss: {np.mean(batch_loss):.7f}")
@@ -130,7 +129,7 @@ def main(params):
     os.makedirs(params.save_dir, exist_ok=True)
 
     # Prepare dataset and data loaders
-    dataset = VOCDetection(root=params.train_data, transform=Augmentation(cfg['image_size'], cfg['rgb_mean']))
+    dataset = WiderFaceDetection(root=params.train_data, transform=Augmentation(cfg['image_size'], rgb_mean))
     data_loader = DataLoader(
         dataset,
         batch_size=params.batch_size,
@@ -170,14 +169,7 @@ def main(params):
     )
 
     # Learning rate scheduler
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
-
-    # iters_per_epoch = len(data_loader)
-    # lr_scheduler = PolynomialLR(
-    #     optimizer,
-    #     total_iters=iters_per_epoch * (params.epochs - params.lr_warmup_epochs),
-    #     power=params.power
-    # )
+    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=cfg['milestones'], gamma=params.gamma)
 
     start_epoch = 0
     if params.resume:
@@ -191,7 +183,7 @@ def main(params):
         except Exception as e:
             print(f"Exception occured, message: {e}")
 
-    for epoch in range(start_epoch, params.epochs):
+    for epoch in range(start_epoch, cfg['epochs']):
         train_one_epoch(
             model,
             criterion,
@@ -213,10 +205,11 @@ def main(params):
         lr_scheduler.step()
 
         torch.save(ckpt, f'{params.save_dir}/checkpoint.ckpt')
+        torch.save(model.state_dict(), f'{params.save_dir}/last.pth')
 
     #  save final model
     state = model.state_dict()
-    torch.save(state, f'./weights/last.pt')
+    torch.save(state, f'{params.save_dir}/faceboxes.pth')
 
 
 if __name__ == '__main__':

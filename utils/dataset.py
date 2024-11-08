@@ -1,3 +1,4 @@
+import torch.utils.data as data
 import os
 import cv2
 import numpy as np
@@ -40,7 +41,7 @@ class AnnotationProcessor:
         return bboxes_array
 
 
-class VOCDetection(Dataset):
+class WiderFaceDetection(Dataset):
 
     def __init__(self, root: str, transform=None):
         self.root = root
