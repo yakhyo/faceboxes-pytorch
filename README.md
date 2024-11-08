@@ -2,8 +2,6 @@
 
 ![Downloads](https://img.shields.io/github/downloads/yakhyo/faceboxes-pytorch/total) [![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/yakhyo/faceboxes-pytorch)
 
-https://arxiv.org/abs/1708.05234
-
 FaceBoxes is a high-performance face detection model. This repository provides the code for performing face detection using the FaceBoxes model.
 
 <div align="center">
@@ -11,12 +9,15 @@ FaceBoxes is a high-performance face detection model. This repository provides t
     <img src="assets/animated.gif" height="500px" alt="AI generated image">
 </div>
 
+> [!NOTE]  
+> The performance of this model was not really good when it comes to harder samples. If you want to have better performance please visit to [https://github.com/yakhyo/retinaface-pytorch](https://github.com/yakhyo/retinaface-pytorch).
+
 ## Table of Contents
 
 - [Project Description](#project-description)
 - [Installation](#installation)
 - [Training](#training)
-  - [Dataset Folder Structure](#dataset-folder-structure)
+- [Dataset Folder Structure](#dataset-folder-structure)
 - [Testing](#testing)
 - [Usage](#usage)
 - [Contributing](#contributing)
@@ -34,6 +35,7 @@ Following updates have been made so far:
 - [x] Made several auxiliary updates to the code.
 
 To Do
+
 - [] torch to onnx convert
 - [] onnx inference
 
@@ -47,6 +49,7 @@ cd faceboxes-pytorch
 ```
 
 **To download pre-trained model weights**:
+
 - Run below command:
   ```
   sh download.sh
@@ -55,7 +58,7 @@ cd faceboxes-pytorch
 
 2. **Install dependencies**:
 
-    Create a virtual environment and install the required packages:
+   Create a virtual environment and install the required packages:
 
 ```bash
 conda create -n faceboxes
@@ -66,22 +69,27 @@ pip install -r requirements.txt
     The `requirements.txt` should include the necessary libraries such as `torch`, `opencv-python`, `numpy`, etc.
 
 ## Training
+
 1. Download WIDER_FACE dataset, place the images under this directory:
+
 ```
 ./data/WIDER_FACE/images
 ```
 
 2. Convert WIDER FACE annotations to VOC format or download from [here](https://drive.google.com/file/d/1-s4QCu_v76yNwR-yXMfGqMGgHQ30WxV2/view), place them under this directory:
+
 ```
 ./data/WIDER_FACE/annotations
 ```
 
 3. Train the model using WIDER_FACE train set data:
+
 ```bash
 python train.py --train-data ./data/WIDER_FACE
 ```
 
 `train.py` file arguments:
+
 ```
 usage: train.py [-h] [--train-data TRAIN_DATA] [--num-workers NUM_WORKERS] [--num-classes NUM_CLASSES] [--batch-size BATCH_SIZE] [--epochs EPOCHS] [--print-freq PRINT_FREQ] [--learning-rate LEARNING_RATE]
                 [--lr-warmup-epochs LR_WARMUP_EPOCHS] [--power POWER] [--momentum MOMENTUM] [--weight-decay WEIGHT_DECAY] [--gamma GAMMA] [--save-dir SAVE_DIR] [--resume]
@@ -115,6 +123,7 @@ options:
 ```
 
 ### Dataset Folder Structure
+
 ```
 data/|
      ├── AFW/
@@ -133,10 +142,10 @@ data/|
 
 ```
 
-
 ## Testing
 
 `test.py` file arguments:
+
 ```
 usage: test.py [-h] [--weights WEIGHTS] [--save-dir SAVE_DIR] [--dataset {AFW,PASCAL,FDDB}] [--conf-threshold CONF_THRESHOLD] [--pre-nms-top-k PRE_NMS_TOP_K] [--nms-threshold NMS_THRESHOLD]
                [--post-nms-top-k POST_NMS_TOP_K] [--show-image] [--vis-threshold VIS_THRESHOLD]
@@ -163,17 +172,21 @@ options:
 ```
 
 Example run command:
+
 ```
 python test --weights ./weights/faceboxes.pth --dataset PASCAL
 ```
-It creates a folder with `eval`  name and stores there detection results in a text file.
+
+It creates a folder with `eval` name and stores there detection results in a text file.
 
 ## Usage
 
 To inference on a single image:
+
 ```
 python detecty.py --weights ./weights/faceboxes.pth --image-path sample.jpg
 ```
+
 Resulting file will be saved under `./results` folder.
 
 ## Contributing
@@ -184,6 +197,6 @@ Contributions to improve the FaceBoxes Model are welcome. Feel free to fork the 
 
 The project is licensed under the [MIT license](https://opensource.org/license/mit/).
 
-
 ## Reference
+
 The project is built on top of [FaceBoxes.PyTorch](https://github.com/zisianw/FaceBoxes.PyTorch). Model architecture and training strategy have been re-written for better performance.
